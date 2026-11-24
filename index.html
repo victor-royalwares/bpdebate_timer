@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BP Debate Speech Timer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    /* Subtle pulsing animation for critical overtime state */
+    @keyframes criticalPulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.55);
+      }
+      50% {
+        box-shadow: 0 0 32px 6px rgba(239, 68, 68, 0.35);
+      }
+    }
+    .overtime-glow {
+      animation: criticalPulse 1s infinite ease-in-out;
+    }
+
+    /* Visual flash ripple when a knock triggers */
+    @keyframes knockFlash {
+      0% {
+        transform: scale(0.98);
+        opacity: 1;
+      }
+      100% {
+        transform: scale(1.03);
+        opacity: 0;
+      }
+    }
+    .knock-ring {
+      animation: knockFlash 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+  <!-- Top Navigation / Tournament Header -->
+  <header class="border-b border-slate-800/90 bg-slate-900/75 backdrop-blur-md sticky top-0 z-20">
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand / Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shadow-inner">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="13" r="8"></circle>
+            <path d="M12 9v4l2.5 1.5"></path>
+            <path d="M5 3 2 6"></path>
+            <path d="m22 6-3-3"></path>
+            <path d="M10 2h4"></path>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-base sm:text-lg font-bold tracking-tight text-white leading-tight">BP Debate Timer</h1>
+          <p class="text-xs text-slate-400">British Parliamentary Timekeeper</p>
+        </div>
+      </div>
+
+      <!-- Format Toggle & Audio Controls -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Format Switcher (7m vs 5m) -->
+        <div class="inline-flex rounded-xl bg-slate-950 p-1 border border-slate-800" role="group" aria-label="Speech Format">
+          <button id="btnFormat7" type="button" onclick="setFormat(7)"
+            class="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all bg-indigo-600 text-white shadow-sm">
+            7 Min (Standard)
+          </button>
+          <button id="btnFormat5" type="button" onclick="setFormat(5)"
+            class="px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200">
+            5 Min (Short)
+          </button>
+        </div>
+
+        <!-- Test Ding Button -->
+        <button id="btnTestDing" type="button" onclick="triggerTestDing()" title="Test metallic bell ding audio"
+          class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-xs sm:text-sm font-medium text-slate-200 transition-all flex items-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
+          </svg>
+          <span class="hidden sm:inline">Test Ding</span>
+        </button>
+
+        <!-- Mute/Unmute Toggle -->
+        <button id="btnMute" type="button" onclick="toggleMute()" title="Toggle sound effects"
+          class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 transition-all">
+          <!-- Speaker Icon (Unmuted) -->
+          <svg id="iconUnmuted" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          </svg>
+          <!-- Speaker Muted Icon -->
+          <svg id="iconMuted" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-rose-400 hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <line x1="23" y1="9" x2="17" y2="15"></line>
+            <line x1="17" y1="9" x2="23" y2="15"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+
+    <!-- Speaker Role Selector Bar -->
+    <section aria-label="Speaker Order" class="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+      <div class="flex items-center gap-3 overflow-x-auto pb-1 sm:pb-0">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 whitespace-nowrap">Speaker:</span>
+        <div id="speakerChips" class="flex items-center gap-1.5">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between sm:justify-end gap-3 border-t sm:border-t-0 border-slate-800 pt-2.5 sm:pt-0">
+        <div id="speakerBenchBadge" class="text-xs font-medium px-2.5 py-1 rounded-lg bg-sky-500/10 text-sky-300 border border-sky-500/20">
+          Opening Government (OG)
+        </div>
+        <button type="button" onclick="nextSpeaker()"
+          class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-xs font-semibold text-slate-200 transition-all flex items-center gap-1 whitespace-nowrap">
+          <span>Next Speaker</span>
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+        </button>
+      </div>
+    </section>
+
+    <!-- Primary Timer Display Card -->
+    <section id="timerCard" class="relative overflow-hidden rounded-3xl border-2 border-amber-500/40 bg-slate-900/90 p-6 sm:p-10 transition-all duration-300 shadow-2xl">
+      <!-- Visual Knock Pulse Overlay -->
+      <div id="knockFlashOverlay" class="pointer-events-none absolute inset-0 rounded-3xl border-4 border-white/60 opacity-0"></div>
+
+      <!-- Top Row: Phase Status Pill & Signal Indicator -->
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 mb-6">
+        <div id="phaseBadge" class="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wide uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 transition-colors duration-300">
+          <span id="phaseDot" class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
+          <span id="phaseText">Protected Time — No POIs</span>
+        </div>
+
+        <div id="signalCallout" class="text-xs sm:text-sm font-medium text-slate-400 flex items-center gap-2">
+          <span>Next Signal:</span>
+          <span id="nextSignalLabel" class="font-semibold text-slate-200">1:00 (Single Ding)</span>
+        </div>
+      </div>
+
+      <!-- Center: Giant Digital Clock -->
+      <div class="text-center my-4 sm:my-6 select-none">
+        <div id="clockDisplay" class="font-mono text-7xl sm:text-8xl md:text-9xl font-extrabold tracking-tight text-white tabular-nums transition-colors duration-300">
+          0:00
+        </div>
+        <p id="subStatusText" class="mt-3 text-sm sm:text-base text-slate-400 font-medium">
+          No POIs may be offered during the first minute.
+        </p>
+      </div>
+
+      <!-- Progress Bar with Milestone Ticks -->
+      <div class="mt-8 mb-8">
+        <div class="relative h-4 w-full rounded-full bg-slate-800/90 overflow-hidden border border-slate-700/70">
+          <!-- Active Fill -->
+          <div id="progressFill" class="h-full w-0 bg-amber-500 transition-all duration-150 ease-linear rounded-full"></div>
+          <!-- Milestone Markers (Positioned dynamically by JS) -->
+          <div id="markerOpen" class="absolute top-0 bottom-0 w-0.5 bg-white/70 z-10" title="POIs Open"></div>
+          <div id="markerProtectEnd" class="absolute top-0 bottom-0 w-0.5 bg-white/70 z-10" title="POIs Close"></div>
+          <div id="markerTimeUp" class="absolute top-0 bottom-0 w-0.5 bg-rose-400 z-10" title="Official Time Up"></div>
+        </div>
+        <!-- Milestone Labels under Bar -->
+        <div class="relative h-5 mt-1.5 text-[11px] font-mono text-slate-400 select-none">
+          <span class="absolute left-0">0:00</span>
+          <span id="labelOpen" class="absolute -translate-x-1/2">1:00</span>
+          <span id="labelProtectEnd" class="absolute -translate-x-1/2">6:00</span>
+          <span id="labelTimeUp" class="absolute -translate-x-1/2 text-slate-300 font-semibold">7:00</span>
+          <span id="labelGraceEnd" class="absolute right-0 text-rose-400 font-semibold">7:15</span>
+        </div>
+      </div>
+
+      <!-- Primary Playback Controls -->
+      <div class="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+        <button id="btnStartPause" type="button" onclick="toggleTimer()"
+          class="min-w-[150px] px-7 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-base shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2.5">
+          <svg id="iconPlay" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 fill-current" viewBox="0 0 24 24">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <svg id="iconPause" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 fill-current hidden" viewBox="0 0 24 24">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+          <span id="btnStartPauseText">Start Speech</span>
+        </button>
+
+        <button id="btnReset" type="button" onclick="resetTimer()"
+          class="px-6 py-3.5 rounded-2xl bg-slate-800 hover:bg-slate-700 active:scale-95 border border-slate-700 text-slate-200 font-semibold text-base transition-all flex items-center justify-center gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+          <span>Reset</span>
+        </button>
+
+        <!-- Manual Ding Button for Timekeeper -->
+        <button type="button" onclick="manualSingleDing()"
+          class="px-5 py-3.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 active:scale-95 border border-slate-700/80 text-amber-300 font-semibold text-base transition-all flex items-center justify-center gap-2"
+          title="Trigger a manual single bell ding">
+          <span>Manual Ding</span>
+          <span class="text-xs px-1.5 py-0.5 rounded bg-slate-900 text-slate-400 font-mono">D</span>
+        </button>
+      </div>
+
+      <!-- Keyboard Shortcuts Hint -->
+      <div class="mt-5 text-center text-xs text-slate-500">
+        Shortcuts: <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">Space</kbd> Start/Pause ·
+        <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">R</kbd> Reset ·
+        <kbd class="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">D</kbd> Manual Ding
+      </div>
+    </section>
+
+    <!-- Single Speech Timing Breakdown Table -->
+    <section class="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+      <div class="px-6 py-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h2 class="text-base sm:text-lg font-bold text-white">Single Speech Timing Breakdown</h2>
+          <p class="text-xs text-slate-400">Active stage highlights automatically. Click any row to jump to that timestamp.</p>
+        </div>
+        <span id="tableFormatBadge" class="self-start sm:self-auto text-xs font-semibold px-2.5 py-1 rounded-lg bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+          7-Minute Standard
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="border-b border-slate-800 bg-slate-950/50 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <th class="py-3.5 px-6 w-36">Time</th>
+              <th class="py-3.5 px-6 w-52">Signal</th>
+              <th class="py-3.5 px-6">What It Means</th>
+            </tr>
+          </thead>
+          <tbody id="timingTableBody" class="divide-y divide-slate-800/70 text-sm">
+            <!-- Populated dynamically via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-900 py-4 text-center text-xs text-slate-500">
+    British Parliamentary (BP) Debate Format • Web Audio Synthesized Bell Ding
+  </footer>
+
+  <script>
+    /**
+     * BP DEBATE SPEECH TIMER LOGIC
+     * Handles timing milestones, Web Audio metallic bell ding synthesis,
+     * speaker tracking, and interactive timing breakdown updates.
+     */
+
+    // 1. Speaker Roles in BP Order
+    const BP_SPEAKERS = [
+      { short: 'PM', name: 'Prime Minister', bench: 'Opening Government (OG)', benchColor: 'sky' },
+      { short: 'LO', name: 'Leader of Opposition', bench: 'Opening Opposition (OO)', benchColor: 'rose' },
+      { short: 'DPM', name: 'Deputy Prime Minister', bench: 'Opening Government (OG)', benchColor: 'sky' },
+      { short: 'DLO', name: 'Deputy Leader of Opposition', bench: 'Opening Opposition (OO)', benchColor: 'rose' },
+      { short: 'MG', name: 'Member of Government', bench: 'Closing Government (CG)', benchColor: 'indigo' },
+      { short: 'MO', name: 'Member of Opposition', bench: 'Closing Opposition (CO)', benchColor: 'amber' },
+      { short: 'GW', name: 'Government Whip', bench: 'Closing Government (CG)', benchColor: 'indigo' },
+      { short: 'OW', name: 'Opposition Whip', bench: 'Closing Opposition (CO)', benchColor: 'amber' },
+    ];
+
+    // 2. Timing Format Configurations (7-min standard vs 5-min short)
+    const FORMAT_CONFIGS = {
+      7: {
+        label: '7-Minute Standard',
+        openPoi: 60,        // 1:00
+        closePoi: 360,      // 6:00
+        timeUp: 420,        // 7:00
+        graceEnd: 435,      // 7:15
+        rows: [
+          {
+            id: 'protected-start',
+            startSec: 0,
+            endSec: 59,
+            seekSec: 0,
+            time: '0:00 – 1:00',
+            signal: 'Protected Time',
+            signalType: 'status',
+            meaning: 'No POIs may be offered.',
+          },
+          {
+            id: 'signal-open',
+            startSec: 60,
+            endSec: 60,
+            seekSec: 60,
+            time: '1:00',
+            signal: 'Single ding',
+            signalType: 'ding-1',
+            meaning: 'Protected time ends; POIs are now open.',
+          },
+          {
+            id: 'open-time',
+            startSec: 61,
+            endSec: 359,
+            seekSec: 61,
+            time: '1:00 – 6:00',
+            signal: 'Open Time',
+            signalType: 'status',
+            meaning: 'Opposing bench can offer 15-second POIs.',
+          },
+          {
+            id: 'signal-close',
+            startSec: 360,
+            endSec: 419,
+            seekSec: 360,
+            time: '6:00',
+            signal: 'Single ding',
+            signalType: 'ding-1',
+            meaning: 'Protected time begins; no further POIs allowed.',
+          },
+          {
+            id: 'signal-end',
+            startSec: 420,
+            endSec: 434,
+            seekSec: 420,
+            time: '7:00',
+            signal: 'Double ding',
+            signalType: 'ding-2',
+            meaning: 'Official speech time is up.',
+          },
+          {
+            id: 'signal-grace-end',
+            startSec: 435,
+            endSec: Infinity,
+            seekSec: 435,
+            time: '7:15',
+            signal: 'Continuous dings',
+            signalType: 'ding-cont',
+            meaning: 'Grace period ends; judges stop taking notes.',
+          },
+        ],
+      },
+      5: {
+        label: '5-Minute Short Format',
+        openPoi: 30,        // 0:30
+        closePoi: 270,      // 4:30
+        timeUp: 300,        // 5:00
+        graceEnd: 315,      // 5:15
+        rows: [
+          {
+            id: 'protected-start',
+            startSec: 0,
+            endSec: 29,
+            seekSec: 0,
+            time: '0:00 – 0:30',
+            signal: 'Protected Time',
+            signalType: 'status',
+            meaning: 'No POIs may be offered.',
+          },
+          {
+            id: 'signal-open',
+            startSec: 30,
+            endSec: 30,
+            seekSec: 30,
+            time: '0:30',
+            signal: 'Single ding',
+            signalType: 'ding-1',
+            meaning: 'Protected time ends; POIs are now open.',
+          },
+          {
+            id: 'open-time',
+            startSec: 31,
+            endSec: 269,
+            seekSec: 31,
+            time: '0:30 – 4:30',
+            signal: 'Open Time',
+            signalType: 'status',
+            meaning: 'Opposing bench can offer 15-second POIs.',
+          },
+          {
+            id: 'signal-close',
+            startSec: 270,
+            endSec: 299,
+            seekSec: 270,
+            time: '4:30',
+            signal: 'Single ding',
+            signalType: 'ding-1',
+            meaning: 'Protected time begins; no further POIs allowed.',
+          },
+          {
+            id: 'signal-end',
+            startSec: 300,
+            endSec: 314,
+            seekSec: 300,
+            time: '5:00',
+            signal: 'Double ding',
+            signalType: 'ding-2',
+            meaning: 'Official speech time is up.',
+          },
+          {
+            id: 'signal-grace-end',
+            startSec: 315,
+            endSec: Infinity,
+            seekSec: 315,
+            time: '5:15',
+            signal: 'Continuous dings',
+            signalType: 'ding-cont',
+            meaning: 'Grace period ends; judges stop taking notes.',
+          },
+        ],
+      },
+    };
+
+    // 3. Application State
+    let currentFormat = 7;
+    let currentSpeakerIdx = 0;
+    let elapsedSeconds = 0;
+    let isRunning = false;
+    let isMuted = false;
+
+    let timerInterval = null;
+    let continuousDingInterval = null;
+    let triggeredMilestones = new Set();
+
+    // Web Audio API Context
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          audioCtx = new AudioContextClass();
+        }
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    /**
+     * Synthesizes a loud, resonant metallic desk/service bell "ding" using Web Audio API.
+     * Combines fundamental and inharmonic metallic partials with a crisp clapper strike transient.
+     */
+    function playSingleDingSound() {
+      triggerVisualKnockFlash();
+      if (isMuted) return;
+
+      try {
+        initAudio();
+        if (!audioCtx) return;
+
+        const now = audioCtx.currentTime;
+
+        // Master compressor/gain stage to maximize loudness cleanly without clipping
+        const masterGain = audioCtx.createGain();
+        masterGain.gain.setValueAtTime(1.0, now);
+
+        const compressor = audioCtx.createDynamicsCompressor();
+        compressor.threshold.setValueAtTime(-10, now);
+        compressor.knee.setValueAtTime(6, now);
+        compressor.ratio.setValueAtTime(6, now);
+        compressor.attack.setValueAtTime(0.002, now);
+        compressor.release.setValueAtTime(0.15, now);
+
+        masterGain.connect(compressor);
+        compressor.connect(audioCtx.destination);
+
+        // Metallic bell harmonic & inharmonic partials (Freq in Hz, initial gain, decay duration in sec)
+        const partials = [
+          { freq: 1174.66, amp: 0.75, decay: 1.65 }, // D6 - strong fundamental body
+          { freq: 2349.32, amp: 0.55, decay: 1.25 }, // D7 - bright octave overtone
+          { freq: 2793.83, amp: 0.35, decay: 0.90 }, // F7 - minor third metallic shimmer
+          { freq: 3520.00, amp: 0.45, decay: 0.70 }, // A7 - fifth ring
+          { freq: 4698.63, amp: 0.30, decay: 0.45 }, // D8 - upper chime brilliance
+          { freq: 6271.93, amp: 0.22, decay: 0.22 }, // G8 - sharp initial ping
+        ];
+
+        partials.forEach((p) => {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(p.freq, now);
+
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.linearRampToValueAtTime(p.amp, now + 0.003);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + p.decay);
+
+          osc.connect(gain);
+          gain.connect(masterGain);
+
+          osc.start(now);
+          osc.stop(now + p.decay + 0.02);
+        });
+
+        // Crisp metal-on-metal clapper strike transient
+        const strikeOsc = audioCtx.createOscillator();
+        const strikeGain = audioCtx.createGain();
+        strikeOsc.type = 'triangle';
+        strikeOsc.frequency.setValueAtTime(5200, now);
+        strikeOsc.frequency.exponentialRampToValueAtTime(1800, now + 0.025);
+
+        strikeGain.gain.setValueAtTime(0.65, now);
+        strikeGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.03);
+
+        strikeOsc.connect(strikeGain);
+        strikeGain.connect(masterGain);
+        strikeOsc.start(now);
+        strikeOsc.stop(now + 0.035);
+      } catch (err) {
+        console.warn('Web Audio bell playback failed:', err);
+      }
+    }
+
+    function playDoubleDingSound() {
+      playSingleDingSound();
+      setTimeout(() => {
+        playSingleDingSound();
+      }, 280);
+    }
+
+    function startContinuousDings() {
+      if (continuousDingInterval) return;
+      playSingleDingSound();
+      continuousDingInterval = setInterval(() => {
+        if (!isRunning) {
+          stopContinuousDings();
+          return;
+        }
+        playSingleDingSound();
+      }, 480);
+    }
+
+    function stopContinuousDings() {
+      if (continuousDingInterval) {
+        clearInterval(continuousDingInterval);
+        continuousDingInterval = null;
+      }
+    }
+
+    function triggerVisualKnockFlash() {
+      const overlay = document.getElementById('knockFlashOverlay');
+      if (!overlay) return;
+      overlay.classList.remove('knock-ring');
+      void overlay.offsetWidth; // Force reflow to restart CSS animation
+      overlay.classList.add('knock-ring');
+    }
+
+    function triggerTestDing() {
+      initAudio();
+      playSingleDingSound();
+    }
+
+    function manualSingleDing() {
+      initAudio();
+      playSingleDingSound();
+    }
+
+    function toggleMute() {
+      isMuted = !isMuted;
+      document.getElementById('iconUnmuted').classList.toggle('hidden', isMuted);
+      document.getElementById('iconMuted').classList.toggle('hidden', !isMuted);
+      if (isMuted) {
+        stopContinuousDings();
+      }
+    }
+
+    // 4. Formatting Helpers
+    function formatTime(totalSeconds) {
+      const mins = Math.floor(totalSeconds / 60);
+      const secs = totalSeconds % 60;
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // 5. Speaker Selection Logic
+    function renderSpeakers() {
+      const container = document.getElementById('speakerChips');
+      container.innerHTML = BP_SPEAKERS.map((sp, idx) => {
+        const active = idx === currentSpeakerIdx;
+        return `
+          <button type="button" onclick="selectSpeaker(${idx})"
+            class="px-2.5 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+              active
+                ? 'bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-400'
+                : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }">
+            ${idx + 1}. ${sp.short}
+          </button>
+        `;
+      }).join('');
+
+      const activeSp = BP_SPEAKERS[currentSpeakerIdx];
+      const badge = document.getElementById('speakerBenchBadge');
+      badge.textContent = `${activeSp.name} • ${activeSp.bench}`;
+
+      const colorMap = {
+        sky: 'bg-sky-500/10 text-sky-300 border-sky-500/25',
+        rose: 'bg-rose-500/10 text-rose-300 border-rose-500/25',
+        indigo: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/25',
+        amber: 'bg-amber-500/10 text-amber-300 border-amber-500/25',
+      };
+      badge.className = `text-xs font-medium px-2.5 py-1 rounded-lg border ${colorMap[activeSp.benchColor]}`;
+    }
+
+    function selectSpeaker(idx) {
+      currentSpeakerIdx = idx;
+      renderSpeakers();
+    }
+
+    function nextSpeaker() {
+      currentSpeakerIdx = (currentSpeakerIdx + 1) % BP_SPEAKERS.length;
+      renderSpeakers();
+      resetTimer();
+    }
+
+    // 6. Format & Table Rendering
+    function setFormat(minutes) {
+      if (currentFormat === minutes) return;
+      currentFormat = minutes;
+
+      const btn7 = document.getElementById('btnFormat7');
+      const btn5 = document.getElementById('btnFormat5');
+
+      if (minutes === 7) {
+        btn7.className = 'px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all bg-indigo-600 text-white shadow-sm';
+        btn5.className = 'px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200';
+      } else {
+        btn5.className = 'px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all bg-indigo-600 text-white shadow-sm';
+        btn7.className = 'px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-lg transition-all text-slate-400 hover:text-slate-200';
+      }
+
+      document.getElementById('tableFormatBadge').textContent = FORMAT_CONFIGS[minutes].label;
+      resetTimer();
+      positionProgressMilestones();
+      renderTimingTable();
+      updateUI();
+    }
+
+    function positionProgressMilestones() {
+      const cfg = FORMAT_CONFIGS[currentFormat];
+      const maxBar = cfg.graceEnd;
+
+      const pctOpen = (cfg.openPoi / maxBar) * 100;
+      const pctClose = (cfg.closePoi / maxBar) * 100;
+      const pctEnd = (cfg.timeUp / maxBar) * 100;
+
+      document.getElementById('markerOpen').style.left = `${pctOpen}%`;
+      document.getElementById('markerProtectEnd').style.left = `${pctClose}%`;
+      document.getElementById('markerTimeUp').style.left = `${pctEnd}%`;
+
+      const lblOpen = document.getElementById('labelOpen');
+      lblOpen.style.left = `${pctOpen}%`;
+      lblOpen.textContent = formatTime(cfg.openPoi);
+
+      const lblClose = document.getElementById('labelProtectEnd');
+      lblClose.style.left = `${pctClose}%`;
+      lblClose.textContent = formatTime(cfg.closePoi);
+
+      const lblEnd = document.getElementById('labelTimeUp');
+      lblEnd.style.left = `${pctEnd}%`;
+      lblEnd.textContent = formatTime(cfg.timeUp);
+
+      document.getElementById('labelGraceEnd').textContent = formatTime(cfg.graceEnd);
+    }
+
+    function renderTimingTable() {
+      const cfg = FORMAT_CONFIGS[currentFormat];
+      const tbody = document.getElementById('timingTableBody');
+
+      tbody.innerHTML = cfg.rows.map((row) => {
+        let signalBadge = '';
+        if (row.signalType === 'ding-1') {
+          signalBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">🔔 ${row.signal}</span>`;
+        } else if (row.signalType === 'ding-2') {
+          signalBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30">🔔🔔 ${row.signal}</span>`;
+        } else if (row.signalType === 'ding-cont') {
+          signalBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-red-600/20 text-red-300 border border-red-500/40">🚨 ${row.signal}</span>`;
+        } else {
+          signalBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">${row.signal}</span>`;
+        }
+
+        return `
+          <tr id="row-${row.id}" onclick="seekToTime(${row.seekSec})"
+            class="cursor-pointer transition-colors hover:bg-slate-800/50">
+            <td class="py-3.5 px-6 font-mono font-bold text-slate-200 whitespace-nowrap">${row.time}</td>
+            <td class="py-3.5 px-6 whitespace-nowrap">${signalBadge}</td>
+            <td class="py-3.5 px-6 text-slate-300">${row.meaning}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // 7. Timer Execution & Milestone Checks
+    function toggleTimer() {
+      initAudio();
+      if (isRunning) {
+        pauseTimer();
+      } else {
+        startTimer();
+      }
+    }
+
+    function startTimer() {
+      if (isRunning) return;
+      isRunning = true;
+
+      // Update button UI
+      const btn = document.getElementById('btnStartPause');
+      btn.className = 'min-w-[150px] px-7 py-3.5 rounded-2xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-bold text-base shadow-lg shadow-amber-950/50 transition-all flex items-center justify-center gap-2.5';
+      document.getElementById('iconPlay').classList.add('hidden');
+      document.getElementById('iconPause').classList.remove('hidden');
+      document.getElementById('btnStartPauseText').textContent = 'Pause';
+
+      // Resume continuous dings if already in overtime
+      const cfg = FORMAT_CONFIGS[currentFormat];
+      if (elapsedSeconds >= cfg.graceEnd) {
+        startContinuousDings();
+      }
+
+      timerInterval = setInterval(() => {
+        elapsedSeconds += 1;
+        evaluateMilestones(elapsedSeconds);
+        updateUI();
+      }, 1000);
+    }
+
+    function pauseTimer() {
+      isRunning = false;
+      clearInterval(timerInterval);
+      timerInterval = null;
+      stopContinuousDings();
+
+      const btn = document.getElementById('btnStartPause');
+      btn.className = 'min-w-[150px] px-7 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-base shadow-lg shadow-emerald-950/50 transition-all flex items-center justify-center gap-2.5';
+      document.getElementById('iconPlay').classList.remove('hidden');
+      document.getElementById('iconPause').classList.add('hidden');
+      document.getElementById('btnStartPauseText').textContent = elapsedSeconds > 0 ? 'Resume' : 'Start Speech';
+    }
+
+    function resetTimer() {
+      pauseTimer();
+      elapsedSeconds = 0;
+      triggeredMilestones.clear();
+      document.getElementById('btnStartPauseText').textContent = 'Start Speech';
+      updateUI();
+    }
+
+    function seekToTime(seconds) {
+      initAudio();
+      stopContinuousDings();
+      elapsedSeconds = seconds;
+      triggeredMilestones.clear();
+
+      // Mark earlier milestones as already passed so they don't re-fire retroactively
+      const cfg = FORMAT_CONFIGS[currentFormat];
+      if (seconds > cfg.openPoi) triggeredMilestones.add('open');
+      if (seconds > cfg.closePoi) triggeredMilestones.add('close');
+      if (seconds > cfg.timeUp) triggeredMilestones.add('end');
+
+      // Trigger the exact signal for the clicked timestamp
+      evaluateMilestones(seconds);
+      updateUI();
+    }
+
+    function evaluateMilestones(sec) {
+      const cfg = FORMAT_CONFIGS[currentFormat];
+
+      if (sec === cfg.openPoi && !triggeredMilestones.has('open')) {
+        triggeredMilestones.add('open');
+        playSingleDingSound();
+      } else if (sec === cfg.closePoi && !triggeredMilestones.has('close')) {
+        triggeredMilestones.add('close');
+        playSingleDingSound();
+      } else if (sec === cfg.timeUp && !triggeredMilestones.has('end')) {
+        triggeredMilestones.add('end');
+        playDoubleDingSound();
+      } else if (sec >= cfg.graceEnd) {
+        if (isRunning) {
+          startContinuousDings();
+        } else {
+          playSingleDingSound();
+        }
+      }
+    }
+
+    // 8. Real-Time Visual & Table State Updates
+    function updateUI() {
+      const cfg = FORMAT_CONFIGS[currentFormat];
+      const clockEl = document.getElementById('clockDisplay');
+      const cardEl = document.getElementById('timerCard');
+      const badgeEl = document.getElementById('phaseBadge');
+      const dotEl = document.getElementById('phaseDot');
+      const phaseTextEl = document.getElementById('phaseText');
+      const subStatusEl = document.getElementById('subStatusText');
+      const nextSignalEl = document.getElementById('nextSignalLabel');
+      const progressEl = document.getElementById('progressFill');
+
+      clockEl.textContent = formatTime(elapsedSeconds);
+
+      // Update progress bar percentage (capped at 100% at graceEnd)
+      const pct = Math.min((elapsedSeconds / cfg.graceEnd) * 100, 100);
+      progressEl.style.width = `${pct}%`;
+
+      // Determine Phase Theme & Copy
+      cardEl.classList.remove('overtime-glow');
+
+      if (elapsedSeconds < cfg.openPoi) {
+        // Phase 1: Initial Protected Time (0:00 - 0:59)
+        cardEl.className = 'relative overflow-hidden rounded-3xl border-2 border-amber-500/40 bg-slate-900/90 p-6 sm:p-10 transition-all duration-300 shadow-2xl';
+        badgeEl.className = 'inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wide uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30';
+        dotEl.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+        phaseTextEl.textContent = 'Protected Time — No POIs';
+        subStatusEl.textContent = 'Protected time. Opposing bench may not offer POIs.';
+        nextSignalEl.textContent = `${formatTime(cfg.openPoi)} (Single Ding)`;
+        progressEl.className = 'h-full bg-amber-500 transition-all duration-150 ease-linear rounded-full';
+        clockEl.className = 'font-mono text-7xl sm:text-8xl md:text-9xl font-extrabold tracking-tight text-white tabular-nums';
+      } else if (elapsedSeconds < cfg.closePoi) {
+        // Phase 2: Open Time (1:00 - 5:59)
+        cardEl.className = 'relative overflow-hidden rounded-3xl border-2 border-emerald-500/45 bg-slate-900/90 p-6 sm:p-10 transition-all duration-300 shadow-2xl';
+        badgeEl.className = 'inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wide uppercase bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
+        dotEl.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse';
+        phaseTextEl.textContent = 'Open Time — POIs Allowed';
+        subStatusEl.textContent = 'Opposing bench may stand and offer 15-second Points of Information.';
+        nextSignalEl.textContent = `${formatTime(cfg.closePoi)} (Single Ding)`;
+        progressEl.className = 'h-full bg-emerald-500 transition-all duration-150 ease-linear rounded-full';
+        clockEl.className = 'font-mono text-7xl sm:text-8xl md:text-9xl font-extrabold tracking-tight text-emerald-50 tabular-nums';
+      } else if (elapsedSeconds < cfg.timeUp) {
+        // Phase 3: Final Protected Time (6:00 - 6:59)
+        cardEl.className = 'relative overflow-hidden rounded-3xl border-2 border-orange-500/45 bg-slate-900/90 p-6 sm:p-10 transition-all duration-300 shadow-2xl';
+        badgeEl.className = 'inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wide uppercase bg-orange-500/15 text-orange-300 border border-orange-500/30';
+        dotEl.className = 'w-2.5 h-2.5 rounded-full bg-orange-400';
+        phaseTextEl.textContent = 'Protected Time — POIs Closed';
+        subStatusEl.textContent = 'Final minute protected time. No further POIs allowed.';
+        nextSignalEl.textContent = `${formatTime(cfg.timeUp)} (Double Ding)`;
+        progressEl.className = 'h-full bg-orange-500 transition-all duration-150 ease-linear rounded-full';
+        clockEl.className = 'font-mono text-7xl sm:text-8xl md:text-9xl font-extrabold tracking-tight text-orange-50 tabular-nums';
+      } else if (elapsedSeconds < cfg.graceEnd) {
+        // Phase 4: Grace Period (7:00 - 7:14)
+        cardEl.className = 'relative overflow-hidden rounded-3xl border-2 border-rose-500/60 bg-rose-950/25 p-6 sm:p-10 transition-all duration-300 shadow-2xl';
+        badgeEl.className = 'inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wide uppercase bg-rose-500/20 text-rose-300 border border-rose-500/40';
+        dotEl.className = 'w-2.5 h-2.5 rounded-full bg-rose-400 animate-ping';
+        phaseTextEl.textContent = 'Time Up — 15s Grace Period';
+        subStatusEl.textContent = 'Official speech time is up. Conclude your sentence immediately.';
+        nextSignalEl.textContent = `${formatTime(cfg.graceEnd)} (Continuous Dings)`;
+        progressEl.className = 'h-full bg-rose-500 transition-all duration-150 ease-linear rounded-full';
+        clockEl.className = 'font-mono text-7xl sm:text-8xl md:text-9xl font-extrabold tracking-tight text-rose-300 tabular-nums';
+      } else {
+        // Phase 5: Overtime (7:15+)
+        cardEl.className = 'relative overflow-hidden rounded-3xl border-2 border-red-500 bg-red-950/40 p-6 sm:p-10 transition-all duration-300 shadow-2xl overtime-glow';
+        badgeEl.className = 'inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full text-xs sm:text-sm font-bold tracking-wide uppercase bg-red-600 text-white border border-red-400';
+        dotEl.className = 'w-2.5 h-2.5 rounded-full bg-white animate-ping';
+        phaseTextEl.textContent = 'Grace Period Ended — Overtime';
+        subStatusEl.textContent = 'Continuous dings! Judges have stopped taking notes.';
+        nextSignalEl.textContent = 'Speech Over';
+        progressEl.className = 'h-full bg-red-500 transition-all duration-150 ease-linear rounded-full';
+        clockEl.className = 'font-mono text-7xl sm:text-8xl md:text-9xl font-extrabold tracking-tight text-red-400 tabular-nums';
+      }
+
+      // Highlight matching row in the breakdown table
+      cfg.rows.forEach((row) => {
+        const tr = document.getElementById(`row-${row.id}`);
+        if (!tr) return;
+        const isActiveRow = elapsedSeconds >= row.startSec && elapsedSeconds <= row.endSec;
+        if (isActiveRow) {
+          tr.className = 'cursor-pointer bg-indigo-500/15 border-l-4 border-l-indigo-400 transition-colors';
+        } else {
+          tr.className = 'cursor-pointer transition-colors hover:bg-slate-800/50';
+        }
+      });
+    }
+
+    // 9. Keyboard Shortcuts (Space = Start/Pause, R = Reset, D or K = Manual Ding)
+    document.addEventListener('keydown', (e) => {
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName)) return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleTimer();
+      } else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        resetTimer();
+      } else if (e.key === 'd' || e.key === 'D' || e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        manualSingleDing();
+      }
+    });
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', () => {
+      renderSpeakers();
+      positionProgressMilestones();
+      renderTimingTable();
+      updateUI();
+    });
+  </script>
+</body>
+</html>
